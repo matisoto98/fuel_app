@@ -81,10 +81,18 @@ def test_calcular_missing_field():
     assert response.status_code == 422
 
 
-def _patch_nominatim(monkeypatch, fake):
+def _patch_geocoders(monkeypatch, nominatim, cartociudad):
     monkeypatch.setattr("app.geo._cache", {})
     monkeypatch.setattr("app.geo._last_request", 0.0)
-    monkeypatch.setattr("app.geo._nominatim_search", fake)
+    monkeypatch.setattr("app.geo._nominatim_search", nominatim)
+    monkeypatch.setattr("app.geo._cartociudad_search", cartociudad)
+
+
+def _patch_nominatim(monkeypatch, fake):
+    async def unused(address: str):
+        raise AssertionError("no debe llamar a CartoCiudad")
+
+    _patch_geocoders(monkeypatch, fake, unused)
 
 
 def test_ubicacion_ok(monkeypatch):
@@ -114,7 +122,10 @@ def test_ubicacion_not_found(monkeypatch):
     async def fake_search(address: str):
         return []
 
-    _patch_nominatim(monkeypatch, fake_search)
+    async def no_backup(address: str):
+        return None
+
+    _patch_geocoders(monkeypatch, fake_search, no_backup)
     response = client.get(
         "/api/ubicacion",
         params={"direccion": "Calle que no existe 999"},
@@ -127,7 +138,10 @@ def test_ubicacion_service_down(monkeypatch):
     async def fake_search(address: str):
         raise httpx.TimeoutException("timeout")
 
-    _patch_nominatim(monkeypatch, fake_search)
+    async def backup_down(address: str):
+        raise httpx.TimeoutException("timeout")
+
+    _patch_geocoders(monkeypatch, fake_search, backup_down)
     response = client.get(
         "/api/ubicacion",
         params={"direccion": "Calle de Alcalá 50, Madrid"},
@@ -136,6 +150,40 @@ def test_ubicacion_service_down(monkeypatch):
     assert response.json() == {
         "detail": "El servicio de mapas no está disponible, inténtalo de nuevo",
     }
+
+
+def test_ubicacion_falls_back_when_nominatim_fails(monkeypatch):
+    async def fake_search(address: str):
+        raise httpx.HTTPStatusError(
+            "forbidden",
+            request=httpx.Request("GET", "https://nominatim.openstreetmap.org/search"),
+            response=httpx.Response(403),
+        )
+
+    async def backup(address: str):
+        return {"lat": 40.41, "lon": -3.69, "display_name": "ALCALA 50, Madrid, Madrid"}
+
+    _patch_geocoders(monkeypatch, fake_search, backup)
+    response = client.get("/api/ubicacion", params={"direccion": "Calle de Alcalá 50, Madrid"})
+    assert response.status_code == 200
+    assert response.json() == {
+        "lat": 40.41,
+        "lon": -3.69,
+        "display_name": "ALCALA 50, Madrid, Madrid",
+    }
+
+
+def test_ubicacion_falls_back_when_nominatim_empty(monkeypatch):
+    async def fake_search(address: str):
+        return []
+
+    async def backup(address: str):
+        return {"lat": 40.41, "lon": -3.69, "display_name": "ALCALA 50, Madrid, Madrid"}
+
+    _patch_geocoders(monkeypatch, fake_search, backup)
+    response = client.get("/api/ubicacion", params={"direccion": "Calle de Alcalá 50, Madrid"})
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "ALCALA 50, Madrid, Madrid"
 
 
 def _patch_stations(monkeypatch, download):

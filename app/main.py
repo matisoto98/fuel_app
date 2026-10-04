@@ -12,11 +12,11 @@ from pydantic import BaseModel, Field
 
 from app import stations
 from app.calculator import FuelInput, calculate
-from app.geo import geocode_address
+from app.geo import geocode_address, log_geocoder_failure
 from app.ics import build_ics
 from app.maintenance import DEFAULT_ITEMS, MaintenanceInput, schedule
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 _HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=_HERE / "templates")
 
@@ -25,9 +25,11 @@ templates = Jinja2Templates(directory=_HERE / "templates")
 async def lifespan(_app: FastAPI):
     async def warm() -> None:
         try:
-            await stations.fetch_all_stations()
-        except Exception:
-            log.warning("No se pudo precargar el listado de gasolineras")
+            rows = await stations.fetch_all_stations()
+        except Exception as exc:
+            log.warning("stations cache warm failed: %s", type(exc).__name__)
+        else:
+            log.info("stations cache warmed: %s stations", len(rows))
 
     task = asyncio.create_task(warm())
     yield
@@ -111,7 +113,8 @@ async def ubicacion(direccion: str = ""):
         raise HTTPException(status_code=400, detail="Introduce una dirección válida")
     try:
         found = await geocode_address(direccion)
-    except Exception:
+    except Exception as exc:
+        log_geocoder_failure("nominatim", exc)
         raise HTTPException(
             status_code=503,
             detail="El servicio de mapas no está disponible, inténtalo de nuevo",
