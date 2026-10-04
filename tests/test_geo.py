@@ -21,9 +21,13 @@ def test_geocode_address_uses_cache(monkeypatch):
         calls["n"] += 1
         return [{"lat": "40.4168", "lon": "-3.7038", "display_name": "Madrid"}]
 
+    async def province(lat, lon):
+        return "28"
+
     monkeypatch.setattr("app.geo._cache", {})
     monkeypatch.setattr("app.geo._last_request", 0.0)
     monkeypatch.setattr("app.geo._nominatim_search", fake_search)
+    monkeypatch.setattr("app.geo.province_code", province)
 
     async def twice():
         first = await geocode_address("Calle Mayor 1, Madrid")
@@ -35,6 +39,7 @@ def test_geocode_address_uses_cache(monkeypatch):
         "lat": 40.4168,
         "lon": -3.7038,
         "display_name": "Madrid",
+        "provincia": "28",
     }
     assert second == first
     assert calls["n"] == 1

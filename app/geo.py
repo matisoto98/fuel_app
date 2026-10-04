@@ -12,8 +12,10 @@ from app.config import nominatim_user_agent
 log = logging.getLogger("uvicorn.error")
 _NOMINATIM = "https://nominatim.openstreetmap.org/search"
 _CARTOCIUDAD = "https://www.cartociudad.es/geocoder/api/geocoder/find"
+_REVERSE = "https://www.cartociudad.es/geocoder/api/geocoder/reverseGeocode"
 
 _cache: dict[str, dict | None] = {}
+_province_cache: dict[tuple[float, float], str | None] = {}
 _last_request = 0.0
 _lock: asyncio.Lock | None = None
 _lock_loop: asyncio.AbstractEventLoop | None = None
@@ -35,6 +37,13 @@ def _nominatim_lock() -> asyncio.Lock:
         _lock = asyncio.Lock()
         _lock_loop = loop
     return _lock
+
+
+def _province_digits(raw) -> str | None:
+    text = str(raw).strip() if raw is not None else ""
+    if not text.isdigit():
+        return None
+    return text.zfill(2)
 
 
 def log_geocoder_failure(source: str, exc: BaseException) -> None:
@@ -93,9 +102,34 @@ async def _cartociudad_search(address: str) -> dict | None:
     if lat is None or lng is None:
         return None
     try:
-        return {"lat": float(lat), "lon": float(lng), "display_name": _cartociudad_name(hit)}
+        found = {"lat": float(lat), "lon": float(lng), "display_name": _cartociudad_name(hit)}
     except (TypeError, ValueError):
         return None
+    code = _province_digits(hit.get("provinceCode"))
+    if code:
+        found["provincia"] = code
+    return found
+
+
+async def province_code(lat: float, lon: float) -> str | None:
+    key = (round(lat, 2), round(lon, 2))
+    if key in _province_cache:
+        return _province_cache[key]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                _REVERSE,
+                params={"lon": lon, "lat": lat},
+                headers={"User-Agent": nominatim_user_agent()},
+            )
+            response.raise_for_status()
+            hit = response.json()
+    except Exception as exc:
+        log_geocoder_failure("cartociudad", exc)
+        raise
+    code = _province_digits(hit.get("provinceCode")) if isinstance(hit, dict) else None
+    _province_cache[key] = code
+    return code
 
 
 async def _lookup(address: str) -> dict | None:
@@ -128,5 +162,7 @@ async def geocode_address(address: str) -> dict | None:
             await asyncio.sleep(wait)
         _last_request = time.monotonic()
         found = await _lookup(address)
+        if found is not None and not found.get("provincia"):
+            found["provincia"] = await province_code(found["lat"], found["lon"])
         _cache[key] = found
         return found

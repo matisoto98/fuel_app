@@ -1,6 +1,3 @@
-import asyncio
-import logging
-from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
@@ -12,35 +9,14 @@ from pydantic import BaseModel, Field
 
 from app import stations
 from app.calculator import FuelInput, calculate
-from app.geo import geocode_address, log_geocoder_failure
+from app.geo import geocode_address, log_geocoder_failure, province_code
 from app.ics import build_ics
 from app.maintenance import DEFAULT_ITEMS, MaintenanceInput, schedule
 
-log = logging.getLogger("uvicorn.error")
 _HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=_HERE / "templates")
 
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    async def warm() -> None:
-        try:
-            rows = await stations.fetch_all_stations()
-        except Exception as exc:
-            log.warning("stations cache warm failed: %s", type(exc).__name__)
-        else:
-            log.info("stations cache warmed: %s stations", len(rows))
-
-    task = asyncio.create_task(warm())
-    yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-
-
-app = FastAPI(title="Calculadora de Combustible", lifespan=lifespan)
+app = FastAPI(title="Calculadora de Combustible")
 app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 
 
@@ -124,6 +100,27 @@ async def ubicacion(direccion: str = ""):
     return found
 
 
+def _in_spain(lat: float, lon: float) -> bool:
+    return 27 <= lat <= 44.5 and -18.5 <= lon <= 5
+
+
+@app.get("/api/provincia")
+async def provincia(lat: float, lon: float):
+    if not _in_spain(lat, lon):
+        raise HTTPException(status_code=400, detail="La ubicación debe estar en España")
+    try:
+        code = await province_code(lat, lon)
+    except Exception as exc:
+        log_geocoder_failure("cartociudad", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio de mapas no está disponible, inténtalo de nuevo",
+        ) from None
+    if not code:
+        raise HTTPException(status_code=404, detail="No pudimos saber tu provincia")
+    return {"provincia": code}
+
+
 @app.get("/api/gasolineras")
 async def gasolineras(
     lat: float,
@@ -134,7 +131,7 @@ async def gasolineras(
 ):
     if combustible not in stations.FUEL_FIELDS:
         raise HTTPException(status_code=400, detail="Tipo de combustible no válido")
-    if not (27 <= lat <= 44.5 and -18.5 <= lon <= 5):
+    if not _in_spain(lat, lon):
         raise HTTPException(status_code=400, detail="La ubicación debe estar en España")
     try:
         rows = await stations.fetch_all_stations()

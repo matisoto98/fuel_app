@@ -1,5 +1,12 @@
 import { formatKm, formatMoney } from "./format.js";
 import { getJson, showError, withBusy } from "./api.js";
+import { cheapestId, findNearest } from "./stations-core.js";
+
+const MINISTRY =
+  "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/FiltroProvincia/";
+const PROVINCE_TTL = 30 * 60 * 1000;
+const PRICE_ERROR = "No pudimos obtener los precios ahora. Escribe el precio a mano o inténtalo más tarde.";
+const provinceCache = new Map();
 
 const address = document.getElementById("direccion");
 const price = document.getElementById("precio");
@@ -80,21 +87,45 @@ function renderStations(data) {
   for (const station of list) stationsEl.append(stationCard(station, station.id === data.mas_barata_id));
 }
 
+async function loadProvince(code) {
+  const cached = provinceCache.get(code);
+  if (cached && Date.now() - cached.at < PROVINCE_TTL) return cached;
+  let data;
+  try {
+    const response = await fetch(`${MINISTRY}${code}`);
+    if (!response.ok) throw new Error(PRICE_ERROR);
+    data = await response.json();
+  } catch {
+    throw new Error(PRICE_ERROR);
+  }
+  const stored = {
+    at: Date.now(),
+    stations: data.ListaEESSPrecio || [],
+    fecha: data.Fecha || "",
+  };
+  provinceCache.set(code, stored);
+  return stored;
+}
+
 async function searchStations() {
-  const params = new URLSearchParams({
-    lat: String(coords.lat),
-    lon: String(coords.lon),
-    combustible: fuel(),
-    limite: "5",
+  if (!coords.provincia) {
+    showSearchError("No pudimos saber tu provincia");
+    return;
+  }
+  const loaded = await loadProvince(coords.provincia);
+  const gasolineras = findNearest(loaded.stations, coords.lat, coords.lon, fuel());
+  renderStations({
+    actualizado: loaded.fecha,
+    gasolineras,
+    mas_barata_id: cheapestId(gasolineras),
   });
-  renderStations(await getJson(`/api/gasolineras?${params}`));
 }
 
 async function searchAddress() {
   showError("err-address", "");
   stationsNote.textContent = "";
   const found = await getJson(`/api/ubicacion?${new URLSearchParams({ direccion: address.value.trim() })}`);
-  coords = { lat: found.lat, lon: found.lon };
+  coords = { lat: found.lat, lon: found.lon, provincia: found.provincia || "" };
   await searchStations();
 }
 
@@ -112,8 +143,16 @@ function useLocation(button) {
   };
   navigator.geolocation.getCurrentPosition(
     async (position) => {
-      coords = { lat: position.coords.latitude, lon: position.coords.longitude };
       try {
+        const here = await getJson(`/api/provincia?${new URLSearchParams({
+          lat: String(position.coords.latitude),
+          lon: String(position.coords.longitude),
+        })}`);
+        coords = {
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+          provincia: here.provincia,
+        };
         await searchStations();
       } catch (error) {
         showSearchError(error.message);

@@ -82,10 +82,14 @@ def test_calcular_missing_field():
 
 
 def _patch_geocoders(monkeypatch, nominatim, cartociudad):
+    async def province(lat, lon):
+        return "28"
+
     monkeypatch.setattr("app.geo._cache", {})
     monkeypatch.setattr("app.geo._last_request", 0.0)
     monkeypatch.setattr("app.geo._nominatim_search", nominatim)
     monkeypatch.setattr("app.geo._cartociudad_search", cartociudad)
+    monkeypatch.setattr("app.geo.province_code", province)
 
 
 def _patch_nominatim(monkeypatch, fake):
@@ -115,6 +119,7 @@ def test_ubicacion_ok(monkeypatch):
         "lat": 40.42,
         "lon": -3.70,
         "display_name": "Calle de Alcalá 50, Madrid",
+        "provincia": "28",
     }
 
 
@@ -161,7 +166,12 @@ def test_ubicacion_falls_back_when_nominatim_fails(monkeypatch):
         )
 
     async def backup(address: str):
-        return {"lat": 40.41, "lon": -3.69, "display_name": "ALCALA 50, Madrid, Madrid"}
+        return {
+            "lat": 40.41,
+            "lon": -3.69,
+            "display_name": "ALCALA 50, Madrid, Madrid",
+            "provincia": "28",
+        }
 
     _patch_geocoders(monkeypatch, fake_search, backup)
     response = client.get("/api/ubicacion", params={"direccion": "Calle de Alcalá 50, Madrid"})
@@ -170,6 +180,7 @@ def test_ubicacion_falls_back_when_nominatim_fails(monkeypatch):
         "lat": 40.41,
         "lon": -3.69,
         "display_name": "ALCALA 50, Madrid, Madrid",
+        "provincia": "28",
     }
 
 
@@ -178,7 +189,12 @@ def test_ubicacion_falls_back_when_nominatim_empty(monkeypatch):
         return []
 
     async def backup(address: str):
-        return {"lat": 40.41, "lon": -3.69, "display_name": "ALCALA 50, Madrid, Madrid"}
+        return {
+            "lat": 40.41,
+            "lon": -3.69,
+            "display_name": "ALCALA 50, Madrid, Madrid",
+            "provincia": "28",
+        }
 
     _patch_geocoders(monkeypatch, fake_search, backup)
     response = client.get("/api/ubicacion", params={"direccion": "Calle de Alcalá 50, Madrid"})
@@ -249,6 +265,48 @@ def test_gasolineras_service_down(monkeypatch):
     )
     assert response.status_code == 503
     assert response.json() == {"detail": "No pudimos obtener los precios, inténtalo más tarde"}
+
+
+def test_provincia_ok(monkeypatch):
+    async def province(lat, lon):
+        return "28"
+
+    monkeypatch.setattr("app.main.province_code", province)
+    response = client.get("/api/provincia", params={"lat": 40.42, "lon": -3.70})
+    assert response.status_code == 200
+    assert response.json() == {"provincia": "28"}
+
+
+def test_provincia_outside_spain(monkeypatch):
+    async def province(lat, lon):
+        raise AssertionError("no debe llamar a CartoCiudad")
+
+    monkeypatch.setattr("app.main.province_code", province)
+    response = client.get("/api/provincia", params={"lat": 48, "lon": 2})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "La ubicación debe estar en España"}
+
+
+def test_provincia_not_found(monkeypatch):
+    async def province(lat, lon):
+        return None
+
+    monkeypatch.setattr("app.main.province_code", province)
+    response = client.get("/api/provincia", params={"lat": 40.42, "lon": -3.70})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "No pudimos saber tu provincia"}
+
+
+def test_provincia_service_down(monkeypatch):
+    async def province(lat, lon):
+        raise httpx.TimeoutException("timeout")
+
+    monkeypatch.setattr("app.main.province_code", province)
+    response = client.get("/api/provincia", params={"lat": 40.42, "lon": -3.70})
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "El servicio de mapas no está disponible, inténtalo de nuevo",
+    }
 
 
 def test_ubicacion_too_short(monkeypatch):

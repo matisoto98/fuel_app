@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -79,7 +80,7 @@ def test_fetch_keeps_stale_cache_when_refresh_fails(monkeypatch):
         import app.stations as stations
 
         first = await fetch_all_stations()
-        stations._cached_at = 0.0
+        stations._cached_at = time.monotonic() - stations._TTL - 1
         second = await fetch_all_stations()
         return first, second
 
