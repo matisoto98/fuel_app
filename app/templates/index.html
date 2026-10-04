@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#0e1614" media="(prefers-color-scheme: dark)">
+  <title>Calculadora de Combustible</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%BD%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="page-head">
+      <h1>Calculadora de Combustible</h1>
+      <p>Autonomía, precio cerca de ti y mantenimiento.</p>
+    </header>
+
+    <section class="card" id="coche" aria-labelledby="titulo-coche">
+      <h2 id="titulo-coche">Mi coche</h2>
+      <div class="field">
+        <label for="tank">Capacidad del tanque (L)</label>
+        <input id="tank" name="tank" type="number" inputmode="decimal" step="any" min="0">
+        <p class="hint">Lo encontrarás en el manual o la ficha técnica.</p>
+        <p class="field-error" id="err-tank" hidden></p>
+      </div>
+      <div class="field">
+        <label for="consumption">Consumo (L/100 km)</label>
+        <input id="consumption" name="consumption" type="number" inputmode="decimal" step="any" min="0">
+        <p class="field-error" id="err-consumption" hidden></p>
+      </div>
+      <div class="field">
+        <label for="km-day">Km que conduces al día</label>
+        <input id="km-day" name="km-day" type="number" inputmode="decimal" step="any" min="0">
+        <p class="field-error" id="err-km-day" hidden></p>
+      </div>
+    </section>
+
+    <section class="card" id="card-precio" aria-labelledby="titulo-precio">
+      <h2 id="titulo-precio">Precio del combustible</h2>
+      <fieldset class="field">
+        <legend>Tipo de combustible</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="combustible" value="gasolina95" checked> Gasolina 95</label>
+          <label class="choice"><input type="radio" name="combustible" value="gasolina98"> Gasolina 98</label>
+          <label class="choice"><input type="radio" name="combustible" value="diesel"> Diésel</label>
+        </div>
+      </fieldset>
+      <form id="form-direccion" class="field">
+        <label for="direccion">Tu dirección</label>
+        <div class="search-row">
+          <input id="direccion" name="direccion" type="text" autocomplete="street-address" enterkeyhint="search">
+          <button type="submit" id="buscar">Buscar</button>
+        </div>
+        <p class="field-error" id="err-address" hidden></p>
+      </form>
+      <button type="button" id="gps" class="secondary">📍 Usar mi ubicación</button>
+      <div id="estaciones-live" aria-live="polite">
+        <p id="estaciones-nota" class="hint"></p>
+        <div id="estaciones" class="stations"></div>
+        <p id="actualizado" class="hint"></p>
+      </div>
+      <div class="field">
+        <label for="precio">o escribe el precio (€/L)</label>
+        <input id="precio" name="precio" type="number" inputmode="decimal" step="any" min="0">
+        <p class="field-error" id="err-price" hidden></p>
+      </div>
+    </section>
+
+    <section class="card" id="resultados" aria-labelledby="titulo-resultados">
+      <h2 id="titulo-resultados">Resultados</h2>
+      <button type="button" id="calcular" class="primary">Calcular</button>
+      <div id="resultados-live" aria-live="polite">
+        <p id="resultados-hint" class="hint">Pulsa Calcular para ver la autonomía.</p>
+        <div id="tiles" class="tiles" hidden>
+          <article class="tile">
+            <h3>🚗 Autonomía</h3>
+            <p id="out-range" class="tile-value"></p>
+          </article>
+          <article class="tile">
+            <h3>📅 Te durará</h3>
+            <p id="out-days" class="tile-value"></p>
+          </article>
+          <article class="tile">
+            <h3>⛽ Llenar el tanque</h3>
+            <p id="out-cost" class="tile-value"></p>
+          </article>
+          <article class="tile">
+            <h3>📆 Próximo repostaje</h3>
+            <p id="out-date" class="tile-value"></p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="mantenimiento" aria-labelledby="titulo-mantenimiento">
+      <h2 id="titulo-mantenimiento">Mantenimiento</h2>
+      <div class="field">
+        <label for="brand">Marca</label>
+        <input id="brand" name="brand" type="text" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="model">Modelo</label>
+        <input id="model" name="model" type="text" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="year">Año</label>
+        <input id="year" name="year" type="number" inputmode="numeric" step="1">
+        <p class="field-error" id="err-year" hidden></p>
+      </div>
+      <div class="field">
+        <label for="registration">Fecha de matriculación</label>
+        <input id="registration" name="registration" type="date">
+        <p class="field-error" id="err-registration" hidden></p>
+      </div>
+      <div class="field">
+        <label for="current-km">Km actuales</label>
+        <input id="current-km" name="current-km" type="number" inputmode="numeric" step="1" min="0">
+        <p class="hint">Los km al día se toman de «Mi coche».</p>
+        <p class="field-error" id="err-current-km" hidden></p>
+      </div>
+
+      {% for key, spec in maintenance_items.items() %}
+      <details class="maint-item" data-key="{{ key }}">
+        <summary>{{ spec.label }}</summary>
+        <div class="details-body">
+          {% if spec.note %}<p class="hint">{{ spec.note }}</p>{% endif %}
+          <div class="field">
+            <label for="last-date-{{ key }}">Última vez: fecha</label>
+            <input id="last-date-{{ key }}" data-last-date type="date">
+          </div>
+          <div class="field">
+            <label for="last-km-{{ key }}">A los</label>
+            <div class="suffix">
+              <input id="last-km-{{ key }}" data-last-km type="number" inputmode="numeric" step="1" min="0">
+              <span>km</span>
+            </div>
+          </div>
+          <details class="interval">
+            <summary>Cambiar intervalo</summary>
+            <div class="details-body">
+              <div class="field">
+                <label for="interval-km-{{ key }}">Intervalo (km)</label>
+                <input id="interval-km-{{ key }}" data-interval-km type="number" inputmode="numeric" step="1" min="0" {% if spec.interval_km %}placeholder="{{ spec.interval_km }}"{% endif %}>
+              </div>
+              <div class="field">
+                <label for="interval-months-{{ key }}">Intervalo (meses)</label>
+                <input id="interval-months-{{ key }}" data-interval-months type="number" inputmode="numeric" step="1" min="0" {% if spec.interval_months %}placeholder="{{ spec.interval_months }}"{% endif %}>
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+      {% endfor %}
+
+      <p class="field-error" id="err-maintenance" hidden></p>
+      <button type="button" id="ver-mantenimiento" class="primary">Ver mantenimiento</button>
+      <div id="lista-mantenimiento" class="maint-list" aria-live="polite"></div>
+      <button type="button" id="calendario" class="secondary">📅 Añadir al calendario</button>
+      <p class="hint disclaimer">Intervalos orientativos. Sigue siempre el manual de tu coche.</p>
+    </section>
+
+    <p class="page-foot">
+      <button type="button" id="borrar" class="linkish">Borrar mis datos</button>
+    </p>
+  </main>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

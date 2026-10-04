@@ -1,0 +1,72 @@
+{
+  "Fecha": "04/10/2026 10:00:00",
+  "ListaEESSPrecio": [
+    {
+      "IDEESS": "1001",
+      "Rótulo": "Cerca",
+      "Dirección": "CALLE MAYOR 1",
+      "Municipio": "Madrid",
+      "Provincia": "MADRID",
+      "Horario": "L-D: 24H",
+      "Latitud": "40,42",
+      "Longitud (WGS84)": "-3,70",
+      "Precio Gasolina 95 E5": "1,599",
+      "Precio Gasolina 98 E5": "1,759",
+      "Precio Gasoleo A": "1,499"
+    },
+    {
+      "IDEESS": "1002",
+      "Rótulo": "Barata",
+      "Dirección": "CALLE MAYOR 2",
+      "Municipio": "Madrid",
+      "Provincia": "MADRID",
+      "Horario": "L-D: 06:00-22:00",
+      "Latitud": "40,43",
+      "Longitud (WGS84)": "-3,70",
+      "Precio Gasolina 95 E5": "1,449",
+      "Precio Gasolina 98 E5": "1,649",
+      "Precio Gasoleo A": ""
+    },
+    {
+      "IDEESS": "1003",
+      "Rótulo": "Media",
+      "Dirección": "AVENIDA DE LA PAZ 3",
+      "Municipio": "Madrid",
+      "Provincia": "MADRID",
+      "Horario": "L-V: 07:00-21:00",
+      "Latitud": "40,45",
+      "Longitud (WGS84)": "-3,70",
+      "Precio Gasolina 95 E5": "1,709",
+      "Precio Gasolina 98 E5": "",
+      "Precio Gasoleo A": "1,399"
+    },
+    {
+      "IDEESS": "1004",
+      "Rótulo": "Sin coordenadas",
+      "Dirección": "SIN GEO 4",
+      "Municipio": "Madrid",
+      "Provincia": "MADRID",
+      "Horario": "L-D: 24H",
+      "Latitud": "",
+      "Longitud (WGS84)": "",
+      "Precio Gasolina 95 E5": "1,111",
+      "Precio Gasolina 98 E5": "1,222",
+      "Precio Gasoleo A": "1,000"
+    },
+    {
+      "IDEESS": "1005",
+      "Rótulo": "Lejos",
+      "Dirección": "RAMBLA 5",
+      "Municipio": "Barcelona",
+      "Provincia": "BARCELONA",
+      "Horario": "L-D: 24H",
+      "Latitud": "41,3874",
+      "Longitud (WGS84)": "2,1686",
+      "Precio Gasolina 95 E5": "1,199",
+      "Precio Gasolina 98 E5": "1,299",
+      "Precio Gasoleo A": "1,099"
+    }
+  ],
+  "Nota": "Muestra de prueba",
+  "ResultadoConsulta": "OK"
+}
